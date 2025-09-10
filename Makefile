@@ -1,4 +1,18 @@
 EXTRA_CFLAGS += $(USER_EXTRA_CFLAGS)
+subdir-ccflags-y += \
+  -I$(src)/include \
+  -I$(src)/core \
+  -I$(src)/os_dep \
+  -I$(src)/phl \
+  -I$(src)/platform \
+  -I$(src)/hal/btc \
+  -I$(src)/hal/phydm
+
+EXTRA_CFLAGS += -I$(srctree)/$(src)/include
+EXTRA_CFLAGS += -I$(srctree)/$(src)/platform
+EXTRA_CFLAGS += -I$(srctree)/$(src)/hal/btc
+EXTRA_CFLAGS += -I$(srctree)/$(src)/hal/phydm
+
 EXTRA_CFLAGS += -O1
 #EXTRA_CFLAGS += -O3
 #EXTRA_CFLAGS += -Wall

@@ -15,6 +15,7 @@
 #define  _IOCTL_CFG80211_C_
 
 #include <drv_types.h>
+#include <linux/version.h>
 
 #ifdef CONFIG_IOCTL_CFG80211
 
@@ -4640,18 +4641,27 @@ static int cfg80211_rtw_set_txpower(struct wiphy *wiphy,
 	return 0;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 9, 0)
 static int cfg80211_rtw_get_txpower(struct wiphy *wiphy,
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
-	struct wireless_dev *wdev,
-#endif
-	int *dbm)
+                                    struct wireless_dev *wdev,
+                                    unsigned int link_id,
+                                    int *dbm)
 {
-	RTW_INFO("%s\n", __func__);
-
-	*dbm = (12);
-
-	return 0;
+        (void)link_id;            /* this driver doesn’t use per-link power */
+        RTW_INFO("%s\n", __func__);
+        *dbm = 12;
+        return 0;
 }
+#else
+static int cfg80211_rtw_get_txpower(struct wiphy *wiphy,
+                                    struct wireless_dev *wdev,
+                                    int *dbm)
+{
+        RTW_INFO("%s\n", __func__);
+        *dbm = 12;
+        return 0;
+}
+#endif
 
 inline bool rtw_cfg80211_pwr_mgmt(_adapter *adapter)
 {
@@ -6681,53 +6691,99 @@ static void rtw_get_chbwoff_from_cfg80211_chan_def(
 }
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)) */
 
-static int cfg80211_rtw_set_monitor_channel(struct wiphy *wiphy
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
-	, struct cfg80211_chan_def *chandef
-#else
-	, struct ieee80211_channel *chan
-	, enum nl80211_channel_type channel_type
-#endif
-	)
+#include <linux/version.h>
+#include <linux/netdevice.h>
+
+/* >= 6.7: signature adds struct net_device *dev */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
+static int cfg80211_rtw_set_monitor_channel(struct wiphy *wiphy,
+                                            struct net_device *dev,
+                                            struct cfg80211_chan_def *chandef)
 {
-	_adapter *padapter = wiphy_to_adapter(wiphy);
-	struct rtw_chan_def target_chdef = {0};
-	u8 ht_option;
-	struct _ADAPTER_LINK *padapter_link = GET_PRIMARY_LINK(padapter);
+        (void)dev; /* unused */
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
+        _adapter *padapter = wiphy_to_adapter(wiphy);
+        struct rtw_chan_def target_chdef = (struct rtw_chan_def){0};
+        u8 ht_option;
+        struct _ADAPTER_LINK *padapter_link = GET_PRIMARY_LINK(padapter);
+
 #ifdef CONFIG_DEBUG_CFG80211
-	RTW_INFO("center_freq %u Mhz band %u ch %u width %u freq1 %u freq2 %u\n"
-		, chandef->chan->center_freq
-		, chandef->chan->band
-		, chandef->chan->hw_value
-		, chandef->width
-		, chandef->center_freq1
-		, chandef->center_freq2);
-#endif /* CONFIG_DEBUG_CFG80211 */
-
-	rtw_get_chbwoff_from_cfg80211_chan_def(chandef,
-		&ht_option, &target_chdef);
-#else
-#ifdef CONFIG_DEBUG_CFG80211
-	RTW_INFO("center_freq %u Mhz ch %u channel_type %u\n"
-		, chan->center_freq
-		, chan->hw_value
-		, channel_type);
-#endif /* CONFIG_DEBUG_CFG80211 */
-
-	rtw_get_chdef_from_nl80211_channel_type(chan, channel_type,
-		&ht_option, &target_chdef);
+        RTW_INFO("center_freq %u Mhz band %u ch %u width %u freq1 %u freq2 %u\n",
+                 chandef->chan->center_freq,
+                 chandef->chan->band,
+                 chandef->chan->hw_value,
+                 chandef->width,
+                 chandef->center_freq1,
+                 chandef->center_freq2);
 #endif
-	RTW_INFO(FUNC_ADPT_FMT" band:%d, ch:%d, bw:%d, offset:%d\n",
-		FUNC_ADPT_ARG(padapter), target_chdef.band, target_chdef.chan,
-		target_chdef.bw, target_chdef.offset);
+        rtw_get_chbwoff_from_cfg80211_chan_def(chandef, &ht_option, &target_chdef);
 
-	rtw_set_chbw_cmd(padapter, padapter_link,
-		&target_chdef, RTW_CMDF_WAIT_ACK, RFK_TYPE_FORCE_NOT_DO);
+        RTW_INFO(FUNC_ADPT_FMT" band:%d, ch:%d, bw:%d, offset:%d\n",
+                 FUNC_ADPT_ARG(padapter), target_chdef.band, target_chdef.chan,
+                 target_chdef.bw, target_chdef.offset);
 
-	return 0;
+        rtw_set_chbw_cmd(padapter, padapter_link,
+                         &target_chdef, RTW_CMDF_WAIT_ACK, RFK_TYPE_FORCE_NOT_DO);
+        return 0;
 }
+
+/* 3.8+ legacy: (wiphy, chandef) */
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
+static int cfg80211_rtw_set_monitor_channel(struct wiphy *wiphy,
+                                            struct cfg80211_chan_def *chandef)
+{
+        _adapter *padapter = wiphy_to_adapter(wiphy);
+        struct rtw_chan_def target_chdef = (struct rtw_chan_def){0};
+        u8 ht_option;
+        struct _ADAPTER_LINK *padapter_link = GET_PRIMARY_LINK(padapter);
+
+#ifdef CONFIG_DEBUG_CFG80211
+        RTW_INFO("center_freq %u Mhz band %u ch %u width %u freq1 %u freq2 %u\n",
+                 chandef->chan->center_freq,
+                 chandef->chan->band,
+                 chandef->chan->hw_value,
+                 chandef->width,
+                 chandef->center_freq1,
+                 chandef->center_freq2);
+#endif
+        rtw_get_chbwoff_from_cfg80211_chan_def(chandef, &ht_option, &target_chdef);
+
+        RTW_INFO(FUNC_ADPT_FMT" band:%d, ch:%d, bw:%d, offset:%d\n",
+                 FUNC_ADPT_ARG(padapter), target_chdef.band, target_chdef.chan,
+                 target_chdef.bw, target_chdef.offset);
+
+        rtw_set_chbw_cmd(padapter, padapter_link,
+                         &target_chdef, RTW_CMDF_WAIT_ACK, RFK_TYPE_FORCE_NOT_DO);
+        return 0;
+}
+
+/* very old kernels: (wiphy, chan, channel_type) */
+#else
+static int cfg80211_rtw_set_monitor_channel(struct wiphy *wiphy,
+                                            struct ieee80211_channel *chan,
+                                            enum nl80211_channel_type channel_type)
+{
+        _adapter *padapter = wiphy_to_adapter(wiphy);
+        struct rtw_chan_def target_chdef = (struct rtw_chan_def){0};
+        u8 ht_option;
+        struct _ADAPTER_LINK *padapter_link = GET_PRIMARY_LINK(padapter);
+
+#ifdef CONFIG_DEBUG_CFG80211
+        RTW_INFO("center_freq %u Mhz ch %u channel_type %u\n",
+                 chan->center_freq, chan->hw_value, channel_type);
+#endif
+        rtw_get_chdef_from_nl80211_channel_type(chan, channel_type,
+                                                &ht_option, &target_chdef);
+
+        RTW_INFO(FUNC_ADPT_FMT" band:%d, ch:%d, bw:%d, offset:%d\n",
+                 FUNC_ADPT_ARG(padapter), target_chdef.band, target_chdef.chan,
+                 target_chdef.bw, target_chdef.offset);
+
+        rtw_set_chbw_cmd(padapter, padapter_link,
+                         &target_chdef, RTW_CMDF_WAIT_ACK, RFK_TYPE_FORCE_NOT_DO);
+        return 0;
+}
+#endif
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
 static int cfg80211_rtw_get_channel(struct wiphy *wiphy,

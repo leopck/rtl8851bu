@@ -1639,6 +1639,10 @@ struct _ADAPTER {
 	int bup_hwsim;
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+	bool cac_running;
+#endif
+
 	u8 netif_up;
 
 	u8 registered;

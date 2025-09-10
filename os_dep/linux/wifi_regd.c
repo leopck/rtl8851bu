@@ -14,6 +14,7 @@
  *****************************************************************************/
 
 #include <drv_types.h>
+#include "rtw_cfg80211_compat.h"
 
 #ifdef CONFIG_IOCTL_CFG80211
 #if !RTW_PER_ADAPTER_WIPHY
@@ -975,7 +976,7 @@ static void async_cac_change_work_hdl(_workitem *work)
 		evt = LIST_CONTAINOR(list, struct async_cac_change_evt, list);
 
 		rtnl_lock();
-		cfg80211_cac_event(evt->netdev, &evt->chandef, evt->event, GFP_KERNEL);
+		cfg80211_cac_event_compat(evt->netdev, &evt->chandef, evt->event, GFP_KERNEL);
 		rtnl_unlock();
 
 		rtw_mfree(evt, sizeof(*evt));
@@ -1065,7 +1066,7 @@ static void rtw_cfg80211_cac_event(struct rf_ctl_t *rfctl, u8 band_idx
 		if (async)
 			cfg80211_cac_event_async(iface->pnetdev, &chdef, event);
 		else
-			cfg80211_cac_event(iface->pnetdev, &chdef, event, GFP_KERNEL);
+			cfg80211_cac_event_compat(iface->pnetdev, &chdef, event, GFP_KERNEL);
 	}
 }
 
@@ -1103,7 +1104,7 @@ void rtw_cfg80211_cac_finished_event(struct rf_ctl_t *rfctl, u8 band_idx
 		if (!iface || !(ifbmp & BIT(iface->iface_id)))
 			continue;
 		/* finish only for wdev with cac_started */
-		if (!iface->rtw_wdev || !iface->rtw_wdev->cac_started)
+		if (!iface->rtw_wdev || !RTW_CAC_RUNNING(iface))
 			ifbmp &= ~BIT(iface->iface_id);
 	}
 
@@ -1126,7 +1127,7 @@ void rtw_cfg80211_cac_aborted_event(struct rf_ctl_t *rfctl, u8 band_idx
 		if (!iface || !(ifbmp & BIT(iface->iface_id)))
 			continue;
 		/* abort only for wdev with cac_started */
-		if (!iface->rtw_wdev || !iface->rtw_wdev->cac_started)
+		if (!iface->rtw_wdev || !RTW_CAC_RUNNING(iface))
 			ifbmp &= ~BIT(iface->iface_id);
 	}
 
@@ -1213,9 +1214,9 @@ void rtw_cfg80211_cac_force_finished(struct rf_ctl_t *rfctl, u8 band_idx
 			started_ifbmp &= ~BIT(iface->iface_id);
 			continue;
 		}
-		if (need_start && iface->rtw_wdev->cac_started)
+		if (need_start && RTW_CAC_RUNNING(iface))
 			started_ifbmp &= ~BIT(iface->iface_id);
-		else if (!need_start && !iface->rtw_wdev->cac_started)
+		else if (!need_start && !RTW_CAC_RUNNING(iface))
 			finished_ifbmp &= ~BIT(iface->iface_id);
 	}
 
